@@ -207,7 +207,7 @@
         // --- CONSTANTS, UTILITIES, AND CONFIGURATION ---
 
         // Firebase Configuration (MUST be globally available for module imports)
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { /* Fallback for local testing */ };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { messagingSenderId: "257587125052" /* Fallback for local testing */ };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-luhvverse-app';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
