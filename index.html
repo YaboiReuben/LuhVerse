@@ -207,7 +207,15 @@
         // --- CONSTANTS, UTILITIES, AND CONFIGURATION ---
 
         // Firebase Configuration (MUST be globally available for module imports)
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { messagingSenderId: "257587125052" /* Fallback for local testing */ };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyDhDev0rdwGk2GDr7CfsfcXZ7687jclG9I",
+            authDomain: "luhvreubenchat.firebaseapp.com",
+            projectId: "luhvreubenchat",
+            storageBucket: "luhvreubenchat.firebasestorage.app",
+            messagingSenderId: "257587125052",
+            appId: "1:257587125052:web:bc44d73400a2a4baf8dc39",
+            measurementId: "G-969VC48GB3"
+        };
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-luhvverse-app';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
