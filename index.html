@@ -352,6 +352,35 @@
 
             if (docSnap.exists()) {
                 userProfile = docSnap.data();
+                
+                // --- NEW: Check for expired mutes/bans ---
+                const now = new Date();
+                let updates = {};
+
+                // Check if mute is expired
+                if (userProfile.isMuted && userProfile.muteExpiresAt && new Date(userProfile.muteExpiresAt) < now) {
+                    console.log(`Mute expired for ${userProfile.displayName}. Removing.`);
+                    updates.isMuted = false;
+                    updates.muteReason = null;
+                    updates.muteExpiresAt = null;
+                    userProfile.isMuted = false; // Update local state immediately
+                }
+
+                // Check if ban is expired
+                if (userProfile.isBanned && userProfile.banExpiresAt && new Date(userProfile.banExpiresAt) < now) {
+                    console.log(`Ban expired for ${userProfile.displayName}. Removing.`);
+                    updates.isBanned = false;
+                    updates.banReason = null;
+                    updates.banExpiresAt = null;
+                    userProfile.isBanned = false; // Update local state immediately
+                }
+
+                // If there are any updates, write them back to Firestore
+                if (Object.keys(updates).length > 0) {
+                    await FirebaseServices.updateDoc(docRef, updates);
+                }
+                // --- End of new check ---
+
                 console.log("Profile loaded:", userProfile.displayName, "Role:", userProfile.role);
                 // Listen for real-time changes to the profile (e.g., role changes by admin)
                 FirebaseServices.onSnapshot(docRef, (snapshot) => {
@@ -718,8 +747,11 @@
                     </div>
 
                     ${userProfile.isMuted ? 
-                        `<div class="p-3 text-center text-red-400 border-t border-red-400/50">
-                            <i class="ph-fill ph-speaker-slash mr-2"></i> Muted: You can read but not send messages.
+                        `<div class="p-3 text-center text-red-400 border-t border-red-400/50 text-sm">
+                            <strong class="flex items-center justify-center text-base mb-1"><i class="ph-fill ph-speaker-slash mr-2"></i> MUTED</strong>
+                            <p>You can read but not send messages.</p>
+                            <p class="mt-1"><span class="font-semibold text-white/70">Reason:</span> ${userProfile.muteReason || 'No reason specified.'}</p>
+                            <p><span class="font-semibold text-white/70">Expires:</span> ${userProfile.muteExpiresAt ? new Date(userProfile.muteExpiresAt).toLocaleString() : 'Permanent'}</p>
                         </div>` : 
                         `<form onsubmit="handleSendMessage(event)" class="p-4 border-t border-electric-blue/50 flex space-x-2">
                             <input type="text" id="chat-input" placeholder="Transmit a message..." required class="flex-grow p-3 rounded-lg neon-input" style="font-family: ${fontStyle};">
@@ -1047,6 +1079,18 @@
                                 <label for="admin-target-user" class="block text-sm font-medium text-white/70">Target User (Display Name or UID)</label>
                                 <input type="text" id="admin-target-user" placeholder="Enter Display Name or full UID" class="w-full mt-1 p-3 rounded-lg neon-input">
                             </div>
+
+                            <!-- NEW: Reason and Duration Inputs -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                                <div>
+                                    <label for="admin-action-reason" class="block text-sm font-medium text-white/70">Reason</label>
+                                    <input type="text" id="admin-action-reason" placeholder="Reason for action (logs)" class="w-full mt-1 p-3 rounded-lg neon-input">
+                                </div>
+                                <div>
+                                    <label for="admin-action-duration" class="block text-sm font-medium text-white/70">Duration (in hours)</label>
+                                    <input type="number" id="admin-action-duration" placeholder="0 for permanent" class="w-full mt-1 p-3 rounded-lg neon-input" min="0">
+                                </div>
+                            </div>
                             
                             <!-- Action Buttons -->
                             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
@@ -1180,10 +1224,32 @@
             }
 
             try {
-                await FirebaseServices.updateDoc(target.ref, { isMuted: isMute });
+                let updates = { isMuted: isMute };
+                let logDetails = `User: ${target.data.displayName} (${target.docId})`;
                 const action = isMute ? 'Muted' : 'Unmuted';
+
+                if (isMute) {
+                    const reason = document.getElementById('admin-action-reason').value.trim() || 'No reason specified.';
+                    const durationHours = parseInt(document.getElementById('admin-action-duration').value) || 0;
+                    
+                    updates.muteReason = reason;
+                    if (durationHours > 0) {
+                        const expiryDate = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+                        updates.muteExpiresAt = expiryDate;
+                        logDetails += ` for ${durationHours} hours. Reason: ${reason}`;
+                    } else {
+                        updates.muteExpiresAt = null; // Permanent
+                        logDetails += ` permanently. Reason: ${reason}`;
+                    }
+                } else {
+                    // Clear reason and expiry on unmute
+                    updates.muteReason = null;
+                    updates.muteExpiresAt = null;
+                }
+
+                await FirebaseServices.updateDoc(target.ref, updates);
                 showStatus(`${action} user ${target.data.displayName}.`, false);
-                await logStaffAction(action, `User: ${target.data.displayName} (${target.docId})`);
+                await logStaffAction(action, logDetails);
             } catch (e) {
                 showStatus(`Mute/Unmute failed: ${e.message}`, true);
             }
@@ -1204,10 +1270,35 @@
             }
 
             try {
-                await FirebaseServices.updateDoc(target.ref, { isBanned: isBan, isMuted: isBan ? true : target.data.isMuted });
+                let updates = { isBanned: isBan };
+                let logDetails = `User: ${target.data.displayName} (${target.docId})`;
                 const action = isBan ? 'Banned' : 'Unbanned';
+
+                if (isBan) {
+                    const reason = document.getElementById('admin-action-reason').value.trim() || 'No reason specified.';
+                    const durationHours = parseInt(document.getElementById('admin-action-duration').value) || 0;
+                    
+                    updates.isMuted = true; // Banning also mutes
+                    updates.banReason = reason;
+                    
+                    if (durationHours > 0) {
+                        const expiryDate = new Date(Date.now() + durationHours * 60 * 60 * 1000).toISOString();
+                        updates.banExpiresAt = expiryDate;
+                        logDetails += ` for ${durationHours} hours. Reason: ${reason}`;
+                    } else {
+                        updates.banExpiresAt = null; // Permanent
+                        logDetails += ` permanently. Reason: ${reason}`;
+                    }
+                } else {
+                    // Clear reason and expiry on unban
+                    // Note: This does NOT automatically unmute them.
+                    updates.banReason = null;
+                    updates.banExpiresAt = null;
+                }
+
+                await FirebaseServices.updateDoc(target.ref, updates);
                 showStatus(`${action} user ${target.data.displayName}.`, false);
-                await logStaffAction(action, `User: ${target.data.displayName} (${target.docId})`);
+                await logStaffAction(action, logDetails);
             } catch (e) {
                 showStatus(`Ban/Unban failed: ${e.message}`, true);
             }
