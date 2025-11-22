@@ -590,9 +590,13 @@
                     FirebaseServices.getDocs(qDisplay)
                 ]);
 
-                if (!emailSnap.empty || !displaySnap.empty) {
-                    // UPDATED ERROR MESSAGE as requested by user
-                    showStatus("Error: A Star Identity already exists with this Quantum Email or Display Name. Please change your details to 'Forge Star Identity'.", true);
+                if (!emailSnap.empty) {
+                    showStatus("Error: A Star Identity already exists with this Quantum Email. Please use a different email.", true);
+                    return;
+                }
+
+                if (!displaySnap.empty) {
+                    showStatus("Error: This Display Name is already in use by another Star Identity. Please choose a different name.", true);
                     return;
                 }
 
